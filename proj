@@ -1,0 +1,356 @@
+library(dplyr)
+library(tidyverse)
+library(psych)
+library(ggplot2)
+library(e1071)
+set.seed(6969696)
+# 1. Wczytaj poprawnie z separatorem “;”
+dane <- read.csv("peru_student_enrollment_data_2023_trimmed.csv",sep=";")
+nr <- dane %>% select(where(is.numeric))
+summary(dane)
+describe(nr)  
+
+# Parametry Pozycyjne
+srednia<- sapply(nr,mean,na.rm=TRUE)
+
+moda_fun <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+moda <- sapply(nr, moda_fun)
+
+mediana <- sapply(nr, median)
+
+Q1 <- sapply(nr, quantile, probs = 0.25, na.rm = TRUE)
+Q3 <- sapply(nr, quantile, probs = 0.75, na.rm = TRUE)
+
+IQR <- Q3-Q1
+Q <- (Q3-Q1)/2
+
+T_obsz_zm_poz_min <- mediana-Q
+T_obsz_zm_poz_max <- mediana+Q
+poz_wsp_zmn_Q <- Q/mediana
+poz_wsp_zmn_Q1Q3 <- (Q3-Q1)/(Q3+Q1)
+
+poz_wsk_asymetrii <- (Q3-mediana)-(mediana-Q1)
+
+poz_wsp_asymetrii <- ((Q3-mediana)-(mediana-Q1))/(2*Q)
+
+
+wsk_asymetrii <- srednia-moda
+
+min <- sapply(nr, min, na.rm = TRUE)
+max <- sapply(nr, max, na.rm = TRUE)
+
+# parametry Liczbowe
+war <- sapply(nr, var, na.rm = TRUE)  
+
+odch_std <- sqrt(war)   
+
+odch_przec <- sapply(nr, function(x) mean(abs(x - mean(x, na.rm=TRUE)), na.rm=TRUE))  
+
+wsp_zmiennosci <- odch_std / srednia   
+
+wskaźnik_nierówn <- odch_przec / srednia
+
+T_obsz_zm_sigma_min <- srednia+odch_std
+T_obsz_zm_sigma_max <-srednia+odch_std
+T_obsz_zm_d_min <- srednia+odch_przec
+T_obsz_zm_d_max <-srednia+odch_przec
+
+wsp_asymetrii <- sapply(nr,skewness,na.rm = TRUE)
+
+wsp_koncentracji <- sapply(nr, kurtosis, na.rm = TRUE)
+
+parametry <- rbind(
+  Średnia=srednia,
+  Mediana=mediana,
+  Q1=Q1,
+  Q3=Q3,
+  IQR=IQR,
+  Q=Q,
+  Poz_wspolczynnik_zmQ=poz_wsp_zmn_Q,
+  Poz_wspolczynnik_zmQ1Q3=poz_wsp_zmn_Q1Q3,
+  T_obsz_zm_poz_min=T_obsz_zm_poz_min,
+  T_obsz_zm_poz_max=T_obsz_zm_poz_max,
+  Poz_wsk_asymetrii=poz_wsk_asymetrii,
+  Poz_wsp_asymetrii=poz_wsp_asymetrii,
+  Min=min,
+  Max=max,
+  Wariancja=war, 
+  Odchylenie_std=odch_std,     
+  ochOdchylenie_przec=odch_przec,
+  Wspolczynnik_zmn=wsp_zmiennosci,   
+  Wskaznik_nierow=wskaźnik_nierówn, 
+  Obszar_zmn_sigma_min=T_obsz_zm_sigma_min, 
+  Obszar_zmn_sigma_max=T_obsz_zm_sigma_max,
+  Obszar_zmn_d_min=T_obsz_zm_d_min ,
+  Obszar_zmn_d_max=T_obsz_zm_d_max ,
+  Wspolczynnik_asym=wsp_asymetrii,
+  Wspolczynnik_koncen=wsp_koncentracji
+)
+
+
+print(parametry)
+
+# TESTOWANIE HIPOTEZ
+# SREDNIA
+dane <- read.csv("peru_student_enrollment_data_2023_trimmed.csv",sep=";")
+nr <- dane %>% select(where(is.numeric))
+# Srednia
+s <- nr$NUMBER.OF.ENROLLED.COURSES[50:70]
+n <- 20
+x <- sample(s, n)
+
+
+sh_s<-shapiro.test(x)
+print(sh_s)
+p_value <- sh_s$p.value
+cat("p-value =", round(p_value, 10), "\n")
+
+if (p_value > 0.050) {
+  cat("Na poziomie istotności 0.05 nie odrzucamy normalności.\n")
+} else {
+  cat("Na poziomie istotności 0.05 odrzucamy normalność.\n")
+}
+t.test(s,mu=1)
+
+# Przedziały ufności
+# Mediana
+library(boot)
+m<-nr$NUMBER.OF.ENROLLED.COURSES[50:69]
+m_x<-sample(m,20)
+med_fun <- function(m_x, i) {median(m_x[i])}
+
+b<-boot (data = m_x, statistic = med_fun, R = 1000)
+
+boot.ci(b,type ="perc")
+
+
+# Test Wilcoxona dla mediany
+m<-nr$NUMBER.OF.ENROLLED.COURSES[1000:1199]
+m_x<-sample(m,100)
+
+sh_m<-shapiro.test(m_x)
+print(sh_m)
+
+p_value_m <- sh_m$p.value
+cat("p-value =", round(p_value_m, 10), "\n")
+
+if (p_value_m > 0.05) {
+  cat("Na poziomie istotności 0.05 nie odrzucamy normalności.\n")
+} else {
+  cat("Na poziomie istotności 0.05 odrzucamy normalność.\n")
+}
+wilcox.test(m_x)
+
+
+#WARIANCJA
+
+library(EnvStats)
+w <- nr$NUMBER.OF.ENROLLED.COURSES[50:70]
+var <- sample(w,21)
+
+sh_v<-shapiro.test(var)
+print(sh_v)
+
+p_value_v <- sh_v$p.value
+cat("p-value =", round(p_value_v, 10), "\n")
+
+if (p_value_v > 0.05) {
+  cat("Na poziomie istotności 0.05 nie odrzucamy normalności.\n")
+} else {
+  cat("Na poziomie istotności 0.05 odrzucamy normalność.\n")
+}
+sigma0_sq <- 0.5
+res_var  <- varTest(var, sigma.squared = sigma0_sq, conf.level = 0.95)
+print(res_var)
+
+
+# FRAKCJE
+dane <- read.csv("peru_student_enrollment_data_2023_trimmed.csv",sep=";")
+gender <- dane$GENDER[1:150]
+tablicaFrakcji <- function(x) {
+  tab <- table(x)       
+  prop <- prop.table(tab)         
+  data.frame(
+    Gender    = names(tab),        
+    n        = as.integer(tab),   
+    frakcja  = as.numeric(prop) 
+  )
+}
+
+frakcje_gender <- tablicaFrakcji(gender)
+
+print(frakcje_gender)
+
+k <- sum(gender == "M")   
+n_g <- length(gender) 
+pt <- prop.test(k, n_g, conf.level = 0.95, correct = FALSE)
+print(pt)
+
+#WYKRESY
+# 1
+install.packages("tidyverse","ggplot2")
+library(tidyverse)
+data_csv <- read.csv("peru_student_enrollment_data_2023_trimmed.csv",sep=";")
+subset_data <- data_csv[1:140, ]
+subset_data$GENDER <- factor(
+  subset_data$GENDER,
+  levels = c("F", "M"),
+  labels = c("Kobieta", "Mężczyzna")
+)
+w1 <-
+  ggplot(subset_data, aes(x = GENDER)) +
+  geom_bar(fill = "steelblue") +
+  labs(title = "Liczba studentów według płci",
+       x = "Płeć",
+       y = "Liczba studentów") +
+  theme_minimal()
+plot(w1)
+
+# 2
+library(tidyverse)
+library(ggplot2)
+data_csv <- read.csv("peru_student_enrollment_data_2023_trimmed.csv",sep=";")
+subset_data <- data_csv[500:629, ]
+w2 <- 
+  ggplot(subset_data, aes(x = STUDY.MODE)) +
+  geom_bar(fill = "steelblue") +
+  labs(
+    title = "Liczba studentów według trybu studiów",
+    x     = "Tryb studiów",
+    y     = "Liczba studentów"
+  ) +
+  theme_minimal()
+plot(w2)
+
+#3
+library(tidyverse)
+library(ggplot2)
+data_csv <- read.csv("peru_student_enrollment_data_2023_trimmed.csv", sep = ";")
+df100$STUDY.MODE <- factor(
+  df100$STUDY.MODE,
+  levels = c("Presencial","Remoto","Virtual"),
+  labels = c("Stacjonarny","Zdalny","Wirtualny")
+)
+df2023 <- df100 %>%
+  filter(!is.na(STUDY.MODE), STUDY.MODE != "") %>%
+  mutate(
+    paid_2023 = as.integer(TUITION.PAYMENT.MARCH.2023),
+    Payment_Status = ifelse(paid_2023 == 1, "Płacący", "Niepłacący")
+  ) %>%
+  group_by(STUDY.MODE, Payment_Status) %>%
+  summarise(Count = n(), .groups = "drop")
+ggplot(df2023, aes(x = STUDY.MODE, y = Count, fill = Payment_Status)) +
+  geom_col(position = position_dodge(width = 0.7), width = 0.6) +
+  labs(
+    title = "Status płatności czesnego w marcu 2023 wg trybu studiów",
+    x = "Tryb studiów",
+    y = "Liczba studentów",
+    fill = "Status"
+  ) +
+  theme_minimal(base_size = 14)
+
+# 4
+library(tidyverse)
+library(ggplot2)
+data_csv <- read.csv("peru_student_enrollment_data_2023_trimmed.csv",sep=";")
+subset_data <- data_csv[500:600, ]
+ggplot(subset_data, aes(x = NUMBER.OF.ENROLLED.COURSES)) +
+  geom_histogram(binwidth = 1, color = "white", fill = "steelblue") +
+  labs(
+    title = "Histogram liczby zapisanych kursów",
+    x = "Liczba zapisanych kursów",
+    y = "Liczba studentów"
+  ) +
+  theme_minimal()
+
+
+# REGRESJA
+library(ggplot2)
+
+# Wczytaj dane
+data <- read.csv("peru_student_enrollment_data_2023_trimmed.csv", sep = ";")
+
+# Wybierz tylko potrzebne kolumny
+df <- data[, c("NUMBER.OF.ENROLLED.COURSES", "GENDER", "STUDY.MODE")]
+
+# Usuń brakujące dane
+df <- na.omit(df)
+
+# Upewnij się, że GENDER i STUDY MODE są kategoriami
+df$GENDER <- as.factor(df$GENDER)
+df$STUDY.MODE <- as.factor(df$STUDY.MODE)
+
+# Utwórz model regresji liniowej
+model <- lm(NUMBER.OF.ENROLLED.COURSES ~ GENDER + STUDY.MODE, data = df)
+
+# Podsumowanie modelu
+summary(model)
+
+# Wykresy diagnostyczne modelu
+par(mfrow = c(2, 2))
+plot(model)
+
+
+install.packages("ggfortify","car","lmtest")
+library(tidyverse)
+library(broom)
+library(ggfortify)
+library(car)
+library(lmtest)
+
+# Wczytanie danych
+data <- read.csv("peru_student_enrollment_data_2023_trimmed.csv", sep = ";")
+
+# Wybór i czyszczenie danych
+df <- data %>%
+  select(NUMBER.OF.ENROLLED.COURSES, GENDER, STUDY.MODE) %>%
+  filter(!is.na(GENDER), !is.na(STUDY.MODE), !is.na(NUMBER.OF.ENROLLED.COURSES)) %>%
+  mutate(
+    GENDER = as.factor(GENDER),
+    STUDY.MODE = as.factor(STUDY.MODE)
+  )
+
+# Model regresji
+model <- lm(NUMBER.OF.ENROLLED.COURSES ~ GENDER + STUDY.MODE, data = df)
+summary(model)
+
+# Diagnostyka modelu
+par(mfrow = c(2, 2))
+plot(model)
+
+# Test normalności reszt
+shapiro.test(residuals(model))
+
+# Test homoskedastyczności (Breusch-Pagan)
+bptest(model)
+
+# Test autokorelacji reszt (Durbin-Watson)
+dwtest(model)
+
+# Sprawdzenie współliniowości (VIF)
+vif(model)
+
+# Wykresy diagnostyczne (ggfortify)
+autoplot(model, label.size = 3) + theme_bw()
+
+
+df <- data %>%
+  select(NUMBER.OF.ENROLLED.COURSES, GENDER, STUDY.MODE) %>%
+  filter(!is.na(GENDER), !is.na(STUDY.MODE), !is.na(NUMBER.OF.ENROLLED.COURSES)) %>%
+  mutate(
+    GENDER = as.factor(GENDER),
+    STUDY.MODE = as.factor(STUDY.MODE)
+  )
+ggplot(df, aes(x = STUDY.MODE, y = NUMBER.OF.ENROLLED.COURSES,color = GENDER)) +
+  geom_jitter(width = 0.2, alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_minimal() +
+  labs(
+    x = "Tryb studiów (STUDY.MODE)",
+    y = "Liczba zapisanych kursów (NUMBER.OF.ENROLLED.COURSES)",
+    color = "Płeć (GENDER)",
+    title = "Regresja liniowa: liczba kursów a tryb studiów i płeć"
+  )
