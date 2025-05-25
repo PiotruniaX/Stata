@@ -3,19 +3,18 @@ library(tidyverse)
 library(psych)
 library(ggplot2)
 library(e1071)
-set.seed(6969696)
+set.seed(2025)
 # 1. Wczytaj poprawnie z separatorem “;”
 dane <- read.csv("peru_student_enrollment_data_2023_trimmed.csv",sep=";")
 nr <- dane %>% select(where(is.numeric))
-summary(dane)
-describe(nr)  
 
 # Parametry Pozycyjne
 srednia<- sapply(nr,mean,na.rm=TRUE)
 
 moda_fun <- function(x) {
-  ux <- unique(x)
-  ux[which.max(tabulate(match(x, ux)))]
+  u <- unique(x)
+  tab <- tabulate(match(x, u))
+  u[tab == max(tab)]
 }
 moda <- sapply(nr, moda_fun)
 
@@ -127,7 +126,7 @@ b<-boot (data = m_x, statistic = med_fun, R = 1000)
 boot.ci(b,type ="perc")
 
 
-# Test Wilcoxona dla mediany
+# Test mediany
 m<-nr$NUMBER.OF.ENROLLED.COURSES[1000:1199]
 m_x<-sample(m,100)
 
@@ -191,7 +190,6 @@ print(pt)
 
 #WYKRESY
 # 1
-install.packages("tidyverse","ggplot2")
 library(tidyverse)
 data_csv <- read.csv("peru_student_enrollment_data_2023_trimmed.csv",sep=";")
 subset_data <- data_csv[1:140, ]
@@ -208,7 +206,7 @@ w1 <-
        y = "Liczba studentów") +
   theme_minimal()
 plot(w1)
-
+rm(list = ls())
 # 2
 library(tidyverse)
 library(ggplot2)
@@ -229,6 +227,7 @@ plot(w2)
 library(tidyverse)
 library(ggplot2)
 data_csv <- read.csv("peru_student_enrollment_data_2023_trimmed.csv", sep = ";")
+df100 <- data_csv[200:300,]
 df100$STUDY.MODE <- factor(
   df100$STUDY.MODE,
   levels = c("Presencial","Remoto","Virtual"),
@@ -249,8 +248,7 @@ ggplot(df2023, aes(x = STUDY.MODE, y = Count, fill = Payment_Status)) +
     x = "Tryb studiów",
     y = "Liczba studentów",
     fill = "Status"
-  ) +
-  theme_minimal(base_size = 14)
+  )
 
 # 4
 library(tidyverse)
@@ -263,94 +261,43 @@ ggplot(subset_data, aes(x = NUMBER.OF.ENROLLED.COURSES)) +
     title = "Histogram liczby zapisanych kursów",
     x = "Liczba zapisanych kursów",
     y = "Liczba studentów"
-  ) +
-  theme_minimal()
+  ) 
 
 
 # REGRESJA
-library(ggplot2)
-
-# Wczytaj dane
-data <- read.csv("peru_student_enrollment_data_2023_trimmed.csv", sep = ";")
-
-# Wybierz tylko potrzebne kolumny
-df <- data[, c("NUMBER.OF.ENROLLED.COURSES", "GENDER", "STUDY.MODE")]
-
-# Usuń brakujące dane
-df <- na.omit(df)
-
-# Upewnij się, że GENDER i STUDY MODE są kategoriami
-df$GENDER <- as.factor(df$GENDER)
-df$STUDY.MODE <- as.factor(df$STUDY.MODE)
-
-# Utwórz model regresji liniowej
-model <- lm(NUMBER.OF.ENROLLED.COURSES ~ GENDER + STUDY.MODE, data = df)
-
-# Podsumowanie modelu
-summary(model)
-
-# Wykresy diagnostyczne modelu
-par(mfrow = c(2, 2))
-plot(model)
-
-
-install.packages("ggfortify","car","lmtest")
 library(tidyverse)
 library(broom)
-library(ggfortify)
-library(car)
-library(lmtest)
+library(ggplot2)
 
-# Wczytanie danych
 data <- read.csv("peru_student_enrollment_data_2023_trimmed.csv", sep = ";")
 
-# Wybór i czyszczenie danych
-df <- data %>%
-  select(NUMBER.OF.ENROLLED.COURSES, GENDER, STUDY.MODE) %>%
-  filter(!is.na(GENDER), !is.na(STUDY.MODE), !is.na(NUMBER.OF.ENROLLED.COURSES)) %>%
-  mutate(
-    GENDER = as.factor(GENDER),
-    STUDY.MODE = as.factor(STUDY.MODE)
-  )
+# 2. Sprawdzenie zmiennych
+# Zmienna niezależna: TUITION PAYMENT MARCH 2022 (0/1)
+summary(data$TUITION.PAYMENT.MARCH.2022)
+# Zmienna zależna: NUMBER OF ENROLLED COURSES
+summary(data$NUMBER.OF.ENROLLED.COURSES)
 
-# Model regresji
-model <- lm(NUMBER.OF.ENROLLED.COURSES ~ GENDER + STUDY.MODE, data = df)
-summary(model)
+# 3. Dopasowanie modelu liniowego
+model <- lm(NUMBER.OF.ENROLLED.COURSES ~ TUITION.PAYMENT.MARCH.2022,
+            data = data)
 
-# Diagnostyka modelu
-par(mfrow = c(2, 2))
-plot(model)
+# 4. Podsumowanie (w stylu borrow)
+tidy(model)
+glance(model)
 
-# Test normalności reszt
-shapiro.test(residuals(model))
+# 5. Interpretacja współczynników
+# Intercept (⎯x=0): średnio ok. 1.54 kursu, gdy opłata = 0
+# Slope (β1≈0.22): studenci, którzy zapłacili, zapisują się średnio na 0.22 kursu więcej.
 
-# Test homoskedastyczności (Breusch-Pagan)
-bptest(model)
-
-# Test autokorelacji reszt (Durbin-Watson)
-dwtest(model)
-
-# Sprawdzenie współliniowości (VIF)
-vif(model)
-
-# Wykresy diagnostyczne (ggfortify)
-autoplot(model, label.size = 3) + theme_bw()
-
-
-df <- data %>%
-  select(NUMBER.OF.ENROLLED.COURSES, GENDER, STUDY.MODE) %>%
-  filter(!is.na(GENDER), !is.na(STUDY.MODE), !is.na(NUMBER.OF.ENROLLED.COURSES)) %>%
-  mutate(
-    GENDER = as.factor(GENDER),
-    STUDY.MODE = as.factor(STUDY.MODE)
-  )
-ggplot(df, aes(x = STUDY.MODE, y = NUMBER.OF.ENROLLED.COURSES,color = GENDER)) +
-  geom_jitter(width = 0.2, alpha = 0.5) +
-  geom_smooth(method = "lm", se = FALSE) +
-  theme_minimal() +
+# 6. Wykres regresji
+ggplot(data, aes(x = TUITION.PAYMENT.MARCH.2022,
+                 y = NUMBER.OF.ENROLLED.COURSES)) +
+  geom_jitter(width = 0.1, height = 0, alpha = 0.3) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  scale_x_continuous(breaks = c(0,1), labels = c("nie zapłacił","zapłacił")) +
+  theme_bw() +
   labs(
-    x = "Tryb studiów (STUDY.MODE)",
-    y = "Liczba zapisanych kursów (NUMBER.OF.ENROLLED.COURSES)",
-    color = "Płeć (GENDER)",
-    title = "Regresja liniowa: liczba kursów a tryb studiów i płeć"
+    x = "Opłata za marzec 2022",
+    y = "Liczba zapisanych kursów",
+    title = "Regresja liniowa: Liczba kursów ~ Opłata za czesne"
   )
