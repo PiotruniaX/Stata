@@ -1,0 +1,385 @@
+---
+title: "Analiza regresji i statystyki opisowej"
+author: ""
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    theme: united
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
+)
+library(dplyr)
+library(tidyverse)
+library(psych)
+library(ggplot2)
+library(e1071)
+set.seed(2025)
+```
+
+# 1. Wczytywanie danych
+
+```{r wczytywanie-danych}
+dane <- read.csv("peru_student_enrollment_data_2023_trimmed.csv",sep=";")
+nr <- dane %>% select(where(is.numeric))
+```
+
+# 2. Parametry pozycyjne
+
+```{r}
+# Średnia
+srednia<- sapply(nr,mean,na.rm=TRUE)
+
+# Mediana
+mediana <- sapply(nr, median, nr.rm=TRUE)
+
+# Moda
+moda_fun <- function(x) {
+  u <- unique(x)
+  tab <- tabulate(match(x, u))
+  u[tab == max(tab)]
+}
+moda <- sapply(nr, moda_fun)
+
+# Kwartyle
+Q1 <- sapply(nr, quantile, probs = 0.25, na.rm = TRUE)
+Q3 <- sapply(nr, quantile, probs = 0.75, na.rm = TRUE)
+
+# Miary rozstępu
+IQR <- Q3-Q1
+Q <- (Q3-Q1)/2
+
+# Granice przedziału na podstawie kwartylów
+T_obsz_zm_poz_min <- mediana-Q
+T_obsz_zm_poz_max <- mediana+Q
+
+# Współczynniki zmienności oparty na kwartylach
+poz_wsp_zmn_Q <- Q/mediana
+poz_wsp_zmn_Q1Q3 <- (Q3-Q1)/(Q3+Q1)
+
+# Wskaźniki asymetrii
+poz_wsk_asymetrii <- (Q3-mediana)-(mediana-Q1)
+
+poz_wsp_asymetrii <- ((Q3-mediana)-(mediana-Q1))/(2*Q)
+
+# Asymetria klasyczna
+wsk_asymetrii <- srednia-moda
+
+# Min i max
+min <- sapply(nr, min, na.rm = TRUE)
+max <- sapply(nr, max, na.rm = TRUE)
+```
+
+# 3. Parametry liczbowe
+
+```{r}
+# Odchylenie standardowe i wariancja
+wariancja <- sapply(nr, var, na.rm = TRUE)
+odchylenie_std <- sqrt(wariancja)
+
+# Średnie odchylenie bezwzględne
+odchylenie_przec <- sapply(nr, function(x) mean(abs(x - mean(x, na.rm = TRUE)), na.rm = TRUE))
+
+# Współczynnik zmienności
+wsp_zmiennosci <- odchylenie_std / srednia
+
+# Wskaźnik nierówności
+wskaźnik_nierówn <- odchylenie_przec / srednia
+
+# Typowy obszar zmienności dla odchylenia standardowego
+T_obsz_zm_sigma_min <- srednia+odchylenie_std
+T_obsz_zm_sigma_max <-srednia+odchylenie_std
+
+# Typowy obszar zmienności dla odchylenia przeciętnego
+T_obsz_zm_d_min <- srednia+odchylenie_przec
+T_obsz_zm_d_max <-srednia+odchylenie_przec
+
+# Asymetria i kurtoza
+wsp_asymetrii <- sapply(nr, skewness, na.rm = TRUE)
+wsp_koncentracji <- sapply(nr, kurtosis, na.rm = TRUE)
+```
+
+# 4. Podsumowanie wszystkich parametrów w formie tabeli
+
+```{r}
+parametry <- rbind(
+  Średnia=srednia,
+  Mediana=mediana,
+  Moda=moda,
+  Q1=Q1,
+  Q3=Q3,
+  IQR=IQR,
+  Q=Q,
+  Poz_wspolczynnik_zmQ=poz_wsp_zmn_Q,
+  Poz_wspolczynnik_zmQ1Q3=poz_wsp_zmn_Q1Q3,
+  T_obsz_zm_poz_min=T_obsz_zm_poz_min,
+  T_obsz_zm_poz_max=T_obsz_zm_poz_max,
+  Poz_wsk_asymetrii=poz_wsk_asymetrii,
+  Poz_wsp_asymetrii=poz_wsp_asymetrii,
+  Min=min,
+  Max=max,
+  Wariancja=wariancja, 
+  Odchylenie_std=odchylenie_std,     
+  OchOdchylenie_przec=odchylenie_przec,
+  Wspolczynnik_zmnienności=wsp_zmiennosci,   
+  Wskaznik_nierowności=wskaźnik_nierówn, 
+  Obszar_zmn_sigma_min=T_obsz_zm_sigma_min, 
+  Obszar_zmn_sigma_max=T_obsz_zm_sigma_max,
+  Obszar_zmn_d_min=T_obsz_zm_d_min ,
+  Obszar_zmn_d_max=T_obsz_zm_d_max ,
+  Wspolczynnik_asymetrii=wsp_asymetrii,
+  Wspolczynnik_koncentracji=wsp_koncentracji
+)
+```
+# 5. Testy hipotez i przedziały ufności
+# SREDNIA
+
+H0 - Próba pochodzi z rozkładu normalnego
+
+h1 - Próba nie pochodzi z rozkładu normalnego
+```{r}
+rm(list = ls())
+dane <- read.csv("peru_student_enrollment_data_2023_trimmed.csv",sep=";")
+# Srednia
+s <- dane$NUMBER.OF.ENROLLED.COURSES[50:70]
+n <- 20
+x <- sample(s, n)
+```
+Przeprowadzamy test normalności
+```{r}
+shapiro.test(x)
+```
+Wynik p-value > 0,05
+Na podstawie istotności na poziomie 0,05 nie odrzucamy hipotezy że próba nalezy do rozkładu normalnego
+
+Test t-Studenta:
+
+H0 - Średnia liczba kursów w wybranym fragmencie próby = 1
+
+H1 - Średnia != 1
+```{r}
+t.test(s,mu=1)
+```
+Wynik:
+
+Średnia z próby = 2.2857
+ 
+Przedział ufności to (1.6084,2.9631)
+
+Interpretacja:
+
+   Na poziomie istotności 0.05 odrzucamy hipotezę że Srednia liczba kursów w próóbie jest równa 1
+
+
+# Mediana
+```{r test-mediany, echo=TRUE}
+dane <- read.csv("peru_student_enrollment_data_2023_trimmed.csv",sep=";")
+# Wybór fragmentu danych (obserwacje 1000-1199)
+m <- dane$NUMBER.OF.ENROLLED.COURSES[1000:1199]
+# Losowanie próbki n=100
+m_x <- sample(m, 100)
+
+# Sprawdzenie normalności rozkładu próbki
+shapiro_m <- shapiro.test(m_x)
+print(shapiro_m)
+```
+Interpretacja Shapiro-Wilk dla m_x
+```{r}
+if (shapiro_m$p.value > 0.05) {
+  cat("Na podstawie istotności na poziomie 0,05 nie odrzucamy hipotezy że próba nalezy do rozkładu normalnego.
+")
+} else {
+  cat("Na podstawie istotności na poziomie 0,05 odrzucamy hipoteze że próba nalezy do rozkładu normalnego.
+")
+}
+```
+Test Wilcoxona dla mediany 
+
+H0 - mediana = 1 
+
+H1 - mediana !=1
+```{r}
+wilcox.test(m_x, mu = 1)
+
+```
+
+Interpretacja:
+
+Na poziomie istotności 0.05 odrzucamy hipotezę, że mediana próbki wynosi 1
+
+Przedział ufności dla Mediany
+```{r}
+library(boot)
+
+dane <- read.csv("peru_student_enrollment_data_2023_trimmed.csv",sep=";")
+
+m<-dane$NUMBER.OF.ENROLLED.COURSES[50:69]
+
+m_x<-sample(m,20)
+
+med_fun <- function(m_x, i) {median(m_x[i])}
+
+b<-boot (data = m_x, statistic = med_fun, R = 1000)
+
+boot.ci(b,type ="perc")
+```
+Przedział ufności dla mediany to (1,3)
+
+# Wariancja
+```{r}
+library(EnvStats)
+
+dane <- read.csv("peru_student_enrollment_data_2023_trimmed.csv",sep=";")
+
+w <- dane$NUMBER.OF.ENROLLED.COURSES[50:70]
+
+var <- sample(w,21)
+
+sh_v<-shapiro.test(var)
+print(sh_v)
+
+p_value_v <- sh_v$p.value
+cat("p-value =", round(p_value_v, 10), "\n")
+
+if (p_value_v > 0.05) {
+  cat("Na poziomie istotności 0.05 nie odrzucamy normalności.\n")
+} else {
+  cat("Na poziomie istotności 0.05 odrzucamy normalność.\n")
+}
+```
+Jeśli nie odrzucamy normalności to wykonujemy varTest
+```{r}
+sigma0_sq <- 0.5
+result_var  <- varTest(var, sigma.squared = sigma0_sq, conf.level = 0.95)
+print(result_var)
+
+if (result_var$p.value < 0.05) {
+  cat("Na poziomie istotności 0.05 odrzucamy hipotezę, że wariancja próbki wynosi 0.5.
+")
+} else {
+  cat("Brak podstaw do odrzucenia hipotezy, że wariancja próbki wynosi 0.5.
+")
+}
+
+```
+Przedział ufności dla wariancji [1.296056,4.617531]
+
+# Frakcje
+H0 - odsetek mężczyzn wynosi 50%
+
+H1 - odsetek mężczyzn nie jest równy 50%
+```{r test-proporcji, echo=TRUE}
+# Wczytanie fragmentu danych dotyczących płci (pierwsze 150 obserwacji)
+gender <- dane$GENDER[1:150]
+# Liczba mężczyzn ("M") oraz liczebność próby
+k <- sum(gender == "M", na.rm = TRUE)
+n_g <- length(gender)
+```
+Test proporcji
+```{r}
+prop_res <- prop.test(k, n_g, p = 0.5, conf.level = 0.95, correct = FALSE)
+print(prop_res)
+
+# Interpretacja testu proporcji
+if(prop_res$p.value < 0.05) {
+  cat("Na poziomie istotności 0.05 odrzucamy hipotezę, że odsetek mężczyzn wynosi 50%
+")
+} else {
+  cat("Brak podstaw do odrzucenia hipotezy, że odsetek mężczyzn wynosi 50%.
+")
+}
+```
+Przedział ufności dla frakcji [0.5200492,0.6749568]
+
+# Wykresy
+1. Wykres przedstawiający liczbę mężczyzn i kobiet w grupie 140 osobowej
+```{r}
+library(tidyverse)
+data_csv <- read.csv("peru_student_enrollment_data_2023_trimmed.csv",sep=";")
+subset_data <- data_csv[1:140, ]
+subset_data$GENDER <- factor(
+  subset_data$GENDER,
+  levels = c("F", "M"),
+  labels = c("Kobieta", "Mężczyzna")
+)
+w1 <-
+  ggplot(subset_data, aes(x = GENDER)) +
+  geom_bar(fill = "steelblue") +
+  labs(title = "Liczba studentów według płci",
+       x = "Płeć",
+       y = "Liczba studentów")
+  
+plot(w1)
+```
+
+2. Wykres przedstawiający liczbę studentów na danym trybie studiów
+```{r}
+library(tidyverse)
+library(ggplot2)
+data_csv <- read.csv("peru_student_enrollment_data_2023_trimmed.csv",sep=";")
+data_csv$STUDY.MODE <- factor(
+  data_csv$STUDY.MODE,
+  levels = c("Presencial","Remoto","Virtual"),
+  labels = c("Stacjonarny","Zdalny","Wirtualny")
+)
+subset_data <- data_csv[200:300, ]
+w2 <- 
+  ggplot(subset_data, aes(x = STUDY.MODE)) +
+  geom_bar(fill = "steelblue") +
+  labs(
+    title = "Liczba studentów według trybu studiów",
+    x     = "Tryb studiów",
+    y     = "Liczba studentów"
+  )
+plot(w2)
+```
+
+3. Wykres przedstawiający liczbę studentów opłacających i nieopłacających czesnego
+```{r}
+library(tidyverse)
+library(ggplot2)
+data_csv <- read.csv("peru_student_enrollment_data_2023_trimmed.csv", sep = ";")
+df100 <- data_csv[200:300,]
+df100$STUDY.MODE <- factor(
+  df100$STUDY.MODE,
+  levels = c("Presencial","Remoto","Virtual"),
+  labels = c("Stacjonarny","Zdalny","Wirtualny")
+)
+df2023 <- df100 %>%
+  filter(!is.na(STUDY.MODE), STUDY.MODE != "") %>%
+  mutate(
+    paid_2023 = as.integer(TUITION.PAYMENT.MARCH.2023),
+    Payment_Status = ifelse(paid_2023 == 1, "Płacący", "Niepłacący")
+  ) %>%
+  group_by(STUDY.MODE, Payment_Status) %>%
+  summarise(Count = n(), .groups = "drop")
+ggplot(df2023, aes(x = STUDY.MODE, y = Count, fill = Payment_Status)) +
+  geom_col(position = position_dodge(width = 0.7), width = 0.6) +
+  labs(
+    title = "Status płatności czesnego w marcu 2023 wg trybu studiów",
+    x = "Tryb studiów",
+    y = "Liczba studentów",
+    fill = "Status"
+  )
+```
+
+4. wykres przedstawiający ile studentów zapisało się na daną liczbę kursów
+```{r}
+library(tidyverse)
+library(ggplot2)
+data_csv <- read.csv("peru_student_enrollment_data_2023_trimmed.csv",sep=";")
+subset_data <- data_csv[500:600, ]
+ggplot(subset_data, aes(x = NUMBER.OF.ENROLLED.COURSES)) +
+  geom_histogram(binwidth = 1, color = "white", fill = "steelblue") +
+  labs(
+    title = "Histogram liczby zapisanych kursów",
+    x = "Liczba zapisanych kursów",
+    y = "Liczba studentów"
+  )
+```
